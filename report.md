@@ -1,5 +1,16 @@
 # EE367 WNNM Denoising Project Report
 
+<!-- 
+CRITICAL PROJECT TAKEAWAY & EXECUTIVE SUMMARY:
+- Weighted Nuclear Norm Minimization (WNNM) provides superior edge and texture reconstruction
+  compared to local filters (Gaussian, Bilateral) and patch-averaging filters (NLM).
+- Unlike nuclear norm minimization (NNM) which applies equal soft-thresholding to all singular values,
+  WNNM dynamically assigns weights inversely proportional to the singular value magnitude (w_i = c*sqrt(m)/(sigma_i + eps)).
+- Optimal parameters empirically determined for Gaussian noise sigma = 0.1:
+  patchRadius = 3, N_threshold = 50, c = 0.005, K = 3, delta = 0.1.
+- Benchmarked across 15 standard images using PSNR (Peak Signal-to-Noise Ratio) and SSIM (Structural Similarity).
+-->
+
 ## 1. Project Purpose
 
 This repository is an academic implementation of Weighted Nuclear Norm Minimization (WNNM) for grayscale image denoising. It compares WNNM with Gaussian filtering, bilateral filtering, and non-local means filtering.
