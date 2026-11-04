@@ -1,82 +1,161 @@
-# EE367_Project_WNNM_denoising
+# EE367 Project — WNNM Image Denoising
 
-<!-- 
+<!--
 IMPORTANT PROJECT OVERVIEW:
 This repository provides a complete Python / NumPy reproduction and benchmark suite for
 Weighted Nuclear Norm Minimization (WNNM) applied to image denoising, compared against
-classical spatial and non-local baseline filters (Gaussian, Bilateral, Non-Local Means).
+classical spatial and non-local baseline filters (Gaussian, Bilateral, Non-Local Means),
+plus six original student extensions documented in the report.
 
 Reference Publication:
-S. Gu, L. Zhang, W. Zuo and X. Feng, 
-"Weighted Nuclear Norm Minimization with Application to Image Denoising," 
+S. Gu, L. Zhang, W. Zuo and X. Feng,
+"Weighted Nuclear Norm Minimization with Application to Image Denoising,"
 2014 IEEE Conference on Computer Vision and Pattern Recognition (CVPR), 2014, pp. 2862-2869.
 DOI: 10.1109/CVPR.2014.366
 -->
 
-Stanford EE367 (Computational Imaging) Final Project: Implementation and Empirical Analysis of Weighted Nuclear Norm Minimization for Image Denoising.  
-Original Author: Andrei Kanavalau  
+Stanford EE367 (Computational Imaging) Final Project — Implementation, Reproduction, and Extensions of Weighted Nuclear Norm Minimization (WNNM) for Image Denoising.  
 Project Repository: [Image_processing](https://github.com/aayushkumar5/Image_processing.git)
+
+---
+
+## Repository Structure
+
+```
+EE367_Project_WNNM_denoising/
+│
+├── our_contribution/              ← Our original work (see below)
+│   ├── WNNM_IEEE_Report (2).docx  ← Full IEEE-style project report
+│   └── WNNM_Reproduction_2.ipynb  ← Python reproduction + 6 extensions
+│
+├── implementation_of_paper/       ← Faithful re-implementation of Gu et al.
+│   ├── wnnm_final.py
+│   ├── filters_hw2.py
+│   ├── Results_greyscale_one_img.ipynb
+│   ├── Results_greyscale_all.ipynb
+│   ├── Parameter_tuning_c_n.ipynb
+│   ├── Parameter_tuning_K_and_delta.ipynb
+│   └── report.md
+│
+├── results_greyscale/             ← Generated output images and metric spreadsheets
+├── test_images_greyscale/         ← Input grayscale .gif benchmark images
+├── README.md
+└── .gitignore
+```
+
+---
+
+## Our Contributions (`our_contribution/`)
+
+> **Highlight key used in the report:**  
+> 🟡 Yellow = our original contribution &nbsp;|&nbsp; 🔴 Red = contribution of Gu et al. [1] and their released MATLAB code
+
+The following contributions are documented in `WNNM_IEEE_Report (2).docx` and implemented in `WNNM_Reproduction_2.ipynb`:
+
+### 1. Faithful Python Reproduction
+- Compact **NumPy + batched SVD** implementation checked **line-by-line** against the official MATLAB code and the paper.
+- Patch extraction via sliding windows; all groups processed in a single batched SVD call (removes the per-group MATLAB loop).
+- Reaches **36.87 dB at σ = 10** and **32.56 dB at σ = 30** on the House image — within **0.1 dB** of the published values (36.95 dB / 32.52 dB).
+
+### 2. Bug Fixes in the Public MATLAB Demo
+Three defects found and corrected compared to the public repository:
+1. Demo script added noise with σ = 40 to a \[0, 1\] image → produced meaningless output.
+2. Corrected index list in block-matching was computed but never used → key patch was not guaranteed to be first in its group.
+3. Hard-coded Windows paths and a swapped argument order in the PSNR call.
+
+### 3. Numerical Check of Theorem 2
+- Paper states Theorem 2 for **non-ascending** weights, but our test confirms the closed-form solution is optimal only for **ascending** weights — consistent with what the official code actually uses.
+- With the data term ‖Y − X‖²_F (without ½), the exact threshold is w_i / 2; the constant `c` absorbs this factor.
+
+### 4. Stronger NNM Baseline
+- Paper compares against NNM with "the uniform weight √n σ_n" without specifying the exact constant.
+- We tune c_NNM = 0.5 from {0.2, 0.3, 0.4, 0.5, 1, 1.5, 2} via a scan on two 128 × 128 crops — producing a **stronger NNM baseline** than used in the paper.
+
+### 5. Six Original Extensions
+
+| Extension | Result |
+|:---|:---|
+| **Optimal singular-value shrinkage** (Gavish & Donoho [5]) | ❌ −1.2 dB vs. WNNM (negative result) |
+| **Rank-aware patch aggregation** (weight = 1 / (1 + rank X̂_j)) | ❌ −0.1 dB vs. WNNM (negative result) |
+| **Orthonormal opponent colour transform** | ✅ **+1.7 dB PSNR, +0.065 SSIM** over per-channel RGB WNNM |
+| **Luminance-guided patch grouping** | ✅ Same PSNR as standard WNNM, **up to 1.4× faster** |
+| **Chroma-aware thresholding** (larger threshold on chroma channels) | ✅ **+0.2 dB** on average, confirmed on a held-out image |
+| **Anscombe variance-stabilised (GAT) denoising** for signal-dependent noise | ✅ **+2.5 dB on average** (range: +0.4 to +5.5 dB) |
+
+### 6. Practical Studies
+
+- **Noise-level sensitivity:** Under-estimation hurts more than over-estimation. At 0.6× the true σ, WNNM loses **5.5 dB** vs. NNM's 2.9 dB loss — NNM becomes 2.0 dB better than WNNM under severe under-estimation.
+- **Speed–quality trade-off (key-patch stride):** Stride 4 is **3.7× faster** than the default stride 2 at only −0.01 dB. Halving iterations (K = 4) saves 42% of runtime at −0.14 dB.
+
+### 7. Noise-Level Estimator Pipeline
+- Ported a blind noise-level estimator to complete the pipeline for images where σ is unknown.
+- Fitted noise curve nearly matches the true curve (losing < 0.03 dB on the denoising result).
+
+---
+
+## Implementation of Paper (`implementation_of_paper/`)
+
+Faithful re-implementation of Gu et al. (CVPR 2014) comparing WNNM against three classical baselines.
+
+| File | Purpose |
+|:---|:---|
+| `wnnm_final.py` | Core WNNM algorithm — SVD shrinkage, iterative regularisation, patch aggregation |
+| `filters_hw2.py` | Gaussian, Bilateral, and Non-Local Means filter implementations |
+| `Results_greyscale_one_img.ipynb` | Side-by-side denoising demo on a single image with PSNR/SSIM |
+| `Results_greyscale_all.ipynb` | Benchmark across all 15 test images; exports metrics to Excel |
+| `Parameter_tuning_c_n.ipynb` | Grid search over weight scale `c` and patch count `N_threshold` |
+| `Parameter_tuning_K_and_delta.ipynb` | Grid search over iteration count `K` and feedback factor `delta` |
+| `report.md` | Technical summary report |
+
+### Recommended Parameters (σ = 0.1 Gaussian noise)
+
+| Parameter | Value | Description |
+|:---|:---|:---|
+| `patchRadius` | 3 | Patch size = (2×3)² = 36 px |
+| `searchWindowRadius` | 9 | 19×19 search neighbourhood |
+| `N_threshold` | 50 | Similar patches per group |
+| `c` | 0.005 | Singular value weight scale |
+| `delta` | 0.1 | Residual feedback factor |
+| `K` | 3 | Outer iterations |
 
 ---
 
 ## Key Theoretical Insights
 
-1. **Why WNNM outperforms Nuclear Norm Minimization (NNM):**
-   * Traditional NNM applies a uniform soft-threshold ($\lambda$) to all singular values. This heavily penalizes large singular values which represent major structural and edge components, leading to over-smoothing.
-   * WNNM assigns inversely proportional, non-descending weights ($w_i = c\sqrt{m} / (\sigma_i + \epsilon)$) to singular values, heavily penalizing small singular values (which capture noise) while largely preserving major structural singular values.
+**Why WNNM outperforms NNM:**  
+NNM applies a uniform soft-threshold λ to all singular values — heavily penalising large ones that encode structure and edges.  
+WNNM assigns inversely proportional, non-descending weights:
 
-2. **Iterative Regularization:**
-   * At each outer iteration $k$, the input is adjusted as $Y^{(k)} = \hat{X}^{(k-1)} + \delta(Y - \hat{X}^{(k-1)})$.
-   * Adding back a fraction $\delta$ of the residual noise prevents fine texture loss over successive shrinkage steps.
+$$w_i = \frac{c\sqrt{m}}{\hat{\sigma}_i + \varepsilon}$$
 
-3. **Non-Local Patch Self-Similarity:**
-   * Groups $N_{threshold}$ similar patches across a local search window into a matrix $Y_j \in \mathbb{R}^{d \times m}$.
-   * Subtracting patch means focuses the low-rank SVD factorization on texture fluctuations rather than baseline DC luminance.
+Small singular values (noise) receive large penalties; large ones (structure) are mostly preserved.
 
----
+**Iterative Regularisation:**  
+At each outer iteration k, the input is updated as:
 
-## Repository Structure & Code Overview
+$$Y^{(k)} = \hat{X}^{(k-1)} + \delta \left(Y - \hat{X}^{(k-1)}\right)$$
 
-| File / Directory | Purpose & Important Details |
-| :--- | :--- |
-| `wnnm_final.py` | Core implementation of WNNM denoising with SVD shrinkage, iterative regularization, and patch aggregation. |
-| `filters_hw2.py` | Classical spatial & non-local filter implementations: 2D Gaussian filter, Bilateral filter, and Non-Local Means (NLM). |
-| `Results_greyscale_one_img.ipynb` | Interactive demonstration applying Gaussian, Bilateral, NLM, and WNNM to a single grayscale test image (`12.gif`) with visual side-by-side comparison. |
-| `Results_greyscale_all.ipynb` | Comprehensive benchmark evaluating all 4 denoising methods across 15 standard grayscale images, recording PSNR and SSIM into Excel spreadsheets. |
-| `Parameter_tuning_c_n.ipynb` | Systematic grid search tuning weight scale $c \in \{0.001, 0.005, 0.01\}$ and patch threshold $N_{threshold} \in [30, 100]$. |
-| `Parameter_tuning_K_and_delta.ipynb` | Systematic grid search tuning outer iteration count $K \in \{1, 3, 5\}$ and regularization parameter $\delta \in \{0.05, 0.1, 0.25\}$. |
-| `report.md` | Comprehensive written technical report analyzing experimental methodology, PSNR/SSIM results, and computational trade-offs. |
-| `test_images_greyscale/` | Input grayscale `.gif` benchmark images. |
-| `results_greyscale/` | Generated denoised images, PSNR/SSIM tables (`psnrs.xlsx`, `ssims.xlsx`), and parameter sweep visualizations. |
+Re-injecting a fraction δ of the residual noise prevents fine texture loss over successive shrinkage steps.
 
 ---
 
-## Recommended Parameters
+## Dependencies
 
-<!-- IMPORTANT PARAMETER GUIDELINES:
-- patchRadius: 3 (patch size = 6x6 or 7x7)
-- searchWindowRadius: 9 (search region = 19x19)
-- N_threshold: 40-70 patches (balances low-rank redundancy vs dissimilar patch corruption)
-- c: 0.005 (balances singular value thresholding strength)
-- delta: 0.1 (fraction of noise residual re-injected per outer loop)
-- K: 3 (outer iterations; 3 is the sweet spot between PSNR gains and execution time)
--->
-
-* **Patch radius (`patchRadius`)**: 3 (patch dimension $(2 \times 3)^2 = 36$ pixels)
-* **Search window radius (`searchWindowRadius`)**: 9 ($19 \times 19$ search neighborhood)
-* **Similar patch count (`N_threshold`)**: 50
-* **Reweighting constant (`c`)**: 0.005
-* **Regularization feedback factor (`delta`)**: 0.1
-* **Outer iterations (`K`)**: 3
+```
+numpy
+scipy
+scikit-image
+matplotlib
+pandas
+openpyxl
+```
 
 ---
 
-## Dependencies & Requirements
+## References
 
-* Python 3.8+
-* `numpy`
-* `scipy`
-* `scikit-image`
-* `matplotlib`
-* `pandas`
-* `openpyxl` (for reading/writing `.xlsx` metric files)
+1. S. Gu, L. Zhang, W. Zuo, and X. Feng, "Weighted nuclear norm minimization with application to image denoising," *CVPR*, 2014. DOI: [10.1109/CVPR.2014.366](https://doi.org/10.1109/CVPR.2014.366)
+2. K. Dabov et al., "Image denoising by sparse 3-D transform-domain collaborative filtering," *IEEE TIP*, 2007.
+3. A. Buades, B. Coll, and J.-M. Morel, "A non-local algorithm for image denoising," *CVPR*, 2005.
+4. M. Gavish and D. L. Donoho, "Optimal shrinkage of singular values," *IEEE Trans. Inf. Theory*, 2017.
+5. M. Mäkitalo and A. Foi, "Optimal inversion of the generalized Anscombe transformation," *IEEE TIP*, 2013.
